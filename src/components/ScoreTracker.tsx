@@ -401,7 +401,9 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
             <tbody>
               {scores.map((score) => (
                 <tr key={score.round} className='border-b'>
-                  <td className='py-2 font-medium text-gray-900'>{score.round}</td>
+                  <td className='py-2 font-medium text-gray-900'>
+                    {score.round}
+                  </td>
                   <td className='py-2 px-1 text-xs'>
                     {score.auctionWinner !== undefined &&
                     score.auctionWinner !== -1 ? (
@@ -427,7 +429,10 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                     )}
                   </td>
                   {score.scores.map((s, index) => (
-                    <td key={index} className='text-center py-2 px-1 text-gray-900'>
+                    <td
+                      key={index}
+                      className='text-center py-2 px-1 text-gray-900'
+                    >
                       {s}
                     </td>
                   ))}
