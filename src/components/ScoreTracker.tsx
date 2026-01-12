@@ -413,6 +413,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                           {score.initialBid}
                           {score.promiseIncreased &&
                             score.finalPromise &&
+                            score.initialBid &&
                             score.finalPromise > score.initialBid && (
                               <span className='text-orange-600'>
                                 {' '}
