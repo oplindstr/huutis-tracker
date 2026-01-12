@@ -253,7 +253,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                     onChange={(e) =>
                       setInitialBid(parseInt(e.target.value) || 0)
                     }
-                    className='w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 text-center'
+                    className='w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 text-center text-gray-900'
                     placeholder='0'
                     min='0'
                     max='500'
@@ -284,7 +284,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                     onChange={(e) =>
                       setFinalPromise(parseInt(e.target.value) || 0)
                     }
-                    className='w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 text-center'
+                    className='w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 text-center text-gray-900'
                     placeholder='0'
                     min={initialBid}
                     max='500'
@@ -307,7 +307,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                     type='number'
                     value={currentRound[index] || ''}
                     onChange={(e) => updateScore(index, e.target.value)}
-                    className='w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 text-center'
+                    className='w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 text-center text-gray-900'
                     placeholder='0'
                     min='0'
                     max='999'

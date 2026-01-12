@@ -63,7 +63,7 @@ export function PlayerSetup({ onStartGame }: PlayerSetupProps) {
               value={player}
               onChange={(e) => updatePlayer(index, e.target.value)}
               placeholder={`Player ${index + 1}`}
-              className='flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500'
+              className='flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900'
               maxLength={20}
             />
             {players.length > 2 && (
