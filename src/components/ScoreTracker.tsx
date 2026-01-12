@@ -232,7 +232,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                 <select
                   value={auctionWinner}
                   onChange={(e) => setAuctionWinner(parseInt(e.target.value))}
-                  className='w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500'
+                  className='w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900'
                 >
                   <option value={-1}>Select winner...</option>
                   {players.map((player, index) => (
@@ -401,7 +401,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
             <tbody>
               {scores.map((score) => (
                 <tr key={score.round} className='border-b'>
-                  <td className='py-2 font-medium'>{score.round}</td>
+                  <td className='py-2 font-medium text-gray-900'>{score.round}</td>
                   <td className='py-2 px-1 text-xs'>
                     {score.auctionWinner !== undefined &&
                     score.auctionWinner !== -1 ? (
@@ -427,7 +427,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                     )}
                   </td>
                   {score.scores.map((s, index) => (
-                    <td key={index} className='text-center py-2 px-1'>
+                    <td key={index} className='text-center py-2 px-1 text-gray-900'>
                       {s}
                     </td>
                   ))}
@@ -435,7 +435,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
               ))}
               {/* Totals Row */}
               <tr className='border-t-2 font-bold bg-gray-50'>
-                <td className='py-2'>Total</td>
+                <td className='py-2 text-gray-900'>Total</td>
                 <td className='py-2'></td>
                 {totalScores.map((total, index) => (
                   <td
