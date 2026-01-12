@@ -50,7 +50,7 @@ export function PlayerSetup({ onStartGame }: PlayerSetupProps) {
     <div className='bg-white rounded-xl shadow-lg p-6 space-y-6'>
       <div className='text-center'>
         <h1 className='text-3xl font-bold text-gray-900 mb-2'>🃏 Huutopussi</h1>
-        <p className='text-gray-600'>Score Tracker</p>
+        <p className='text-gray-800'>Score Tracker</p>
       </div>
 
       <div className='space-y-4'>
@@ -80,7 +80,7 @@ export function PlayerSetup({ onStartGame }: PlayerSetupProps) {
         {players.length < 6 && (
           <button
             onClick={addPlayer}
-            className='w-full py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg hover:border-green-500 hover:text-green-500 transition-colors'
+            className='w-full py-2 border-2 border-dashed border-gray-300 text-gray-700 rounded-lg hover:border-green-500 hover:text-green-500 transition-colors'
           >
             + Add Player
           </button>
@@ -98,7 +98,7 @@ export function PlayerSetup({ onStartGame }: PlayerSetupProps) {
         </button>
       </div>
 
-      <div className='text-xs text-gray-500 text-center'>
+      <div className='text-xs text-gray-700 text-center'>
         <p>
           Huutopussi is a Finnish card game where players try to reach 500
           points first.

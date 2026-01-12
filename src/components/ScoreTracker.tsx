@@ -244,7 +244,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
               </div>
               <div className='grid grid-cols-2 gap-2'>
                 <div>
-                  <label className='text-sm font-medium text-gray-700 block mb-1'>
+                  <label className='text-sm font-medium text-gray-800 block mb-1'>
                     Initial Bid:
                   </label>
                   <input
@@ -267,7 +267,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                       onChange={(e) => setPromiseIncreased(e.target.checked)}
                       className='rounded'
                     />
-                    <span className='text-sm text-gray-700'>
+                    <span className='text-sm text-gray-800'>
                       Promise increased?
                     </span>
                   </label>
@@ -275,7 +275,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
               </div>
               {promiseIncreased && (
                 <div>
-                  <label className='text-sm font-medium text-gray-700 block mb-1'>
+                  <label className='text-sm font-medium text-gray-800 block mb-1'>
                     Final Promise:
                   </label>
                   <input
@@ -300,7 +300,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
             <div className='grid grid-cols-2 gap-2 mb-4'>
               {players.map((player, index) => (
                 <div key={index} className='space-y-1'>
-                  <label className='text-sm font-medium text-gray-700 block truncate'>
+                  <label className='text-sm font-medium text-gray-800 block truncate'>
                     {player}
                   </label>
                   <input
@@ -382,16 +382,16 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
           <table className='w-full text-sm'>
             <thead>
               <tr className='border-b'>
-                <th className='text-left py-2 font-medium text-gray-700'>
+                <th className='text-left py-2 font-medium text-gray-800'>
                   Round
                 </th>
-                <th className='text-left py-2 font-medium text-gray-700 min-w-20'>
+                <th className='text-left py-2 font-medium text-gray-800 min-w-20'>
                   Auction
                 </th>
                 {players.map((player, index) => (
                   <th
                     key={index}
-                    className='text-center py-2 px-1 font-medium text-gray-700 truncate max-w-16'
+                    className='text-center py-2 px-1 font-medium text-gray-800 truncate max-w-16'
                   >
                     {player}
                   </th>
@@ -409,7 +409,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                         <div className='font-medium text-blue-600'>
                           {players[score.auctionWinner]}
                         </div>
-                        <div className='text-gray-600'>
+                        <div className='text-gray-700'>
                           {score.initialBid}
                           {score.promiseIncreased &&
                             score.finalPromise &&
@@ -423,7 +423,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                         </div>
                       </div>
                     ) : (
-                      <span className='text-gray-400'>-</span>
+                      <span className='text-gray-500'>-</span>
                     )}
                   </td>
                   {score.scores.map((s, index) => (
@@ -457,14 +457,14 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
         </div>
 
         {scores.length === 0 && (
-          <div className='text-center text-gray-500 py-8'>
+          <div className='text-center text-gray-700 py-8'>
             No rounds played yet. Add scores above to start tracking!
           </div>
         )}
       </div>
 
       {/* Rules */}
-      <div className='p-4 bg-gray-50 border-t text-xs text-gray-600'>
+      <div className='p-4 bg-gray-50 border-t text-xs text-gray-700'>
         <p>
           <strong>Goal:</strong> Be the first to reach 500 points. Highest score
           wins!
