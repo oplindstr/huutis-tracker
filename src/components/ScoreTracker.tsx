@@ -14,14 +14,22 @@ interface Score {
 interface ScoreTrackerProps {
   players: string[]
   onResetGame: () => void
+  isTrackedGame: boolean
+  gameId?: number
 }
 
-export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
+export function ScoreTracker({
+  players,
+  onResetGame,
+  isTrackedGame,
+  gameId,
+}: ScoreTrackerProps) {
   const [scores, setScores] = useState<Score[]>([])
   const [currentRound, setCurrentRound] = useState<number[]>(
-    new Array(players.length).fill(0)
+    new Array(players.length).fill(0),
   )
   const [gameEnded, setGameEnded] = useState(false)
+  const [gameStartTime] = useState(Date.now())
 
   // Auction tracking for current round
   const [auctionWinner, setAuctionWinner] = useState<number>(-1)
@@ -29,40 +37,48 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
   const [promiseIncreased, setPromiseIncreased] = useState<boolean>(false)
   const [finalPromise, setFinalPromise] = useState<number>(0)
 
-  // Load saved scores and auction data from localStorage
+  // Load saved scores and auction data from localStorage (for quick games) or database (for tracked games)
   useEffect(() => {
-    const savedScores = localStorage.getItem('huutopussi-scores')
-    const savedRounds = localStorage.getItem('huutopussi-rounds')
-    const savedAuction = localStorage.getItem('huutopussi-auction')
+    if (!isTrackedGame) {
+      // For quick games, use localStorage as before
+      const savedScores = localStorage.getItem('huutopussi-scores')
+      const savedRounds = localStorage.getItem('huutopussi-rounds')
+      const savedAuction = localStorage.getItem('huutopussi-auction')
 
-    if (savedScores) {
-      setScores(JSON.parse(savedScores))
+      if (savedScores) {
+        setScores(JSON.parse(savedScores))
+      }
+      if (savedRounds) {
+        setCurrentRound(JSON.parse(savedRounds))
+      }
+      if (savedAuction) {
+        const auctionData = JSON.parse(savedAuction)
+        setAuctionWinner(auctionData.auctionWinner || -1)
+        setInitialBid(auctionData.initialBid || 0)
+        setPromiseIncreased(auctionData.promiseIncreased || false)
+        setFinalPromise(auctionData.finalPromise || 0)
+      }
+    } else if (gameId) {
+      // For tracked games, load from database
+      loadGameFromDatabase()
     }
-    if (savedRounds) {
-      setCurrentRound(JSON.parse(savedRounds))
-    }
-    if (savedAuction) {
-      const auctionData = JSON.parse(savedAuction)
-      setAuctionWinner(auctionData.auctionWinner || -1)
-      setInitialBid(auctionData.initialBid || 0)
-      setPromiseIncreased(auctionData.promiseIncreased || false)
-      setFinalPromise(auctionData.finalPromise || 0)
-    }
-  }, [])
+  }, [isTrackedGame, gameId])
 
-  // Save scores and auction data to localStorage
+  // Save to localStorage for quick games
   useEffect(() => {
-    localStorage.setItem('huutopussi-scores', JSON.stringify(scores))
-    localStorage.setItem('huutopussi-rounds', JSON.stringify(currentRound))
-    localStorage.setItem(
-      'huutopussi-auction',
-      JSON.stringify({
-        auctionWinner,
-        initialBid,
-        promiseIncreased,
-        finalPromise,
-      })
-    )
+    if (!isTrackedGame) {
+      localStorage.setItem('huutopussi-scores', JSON.stringify(scores))
+      localStorage.setItem('huutopussi-rounds', JSON.stringify(currentRound))
+      localStorage.setItem(
+        'huutopussi-auction',
+        JSON.stringify({
+          auctionWinner,
+          initialBid,
+          promiseIncreased,
+          finalPromise,
+        }),
+      )
+    }
   }, [
     scores,
     currentRound,
@@ -70,7 +86,93 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
     initialBid,
     promiseIncreased,
     finalPromise,
+    isTrackedGame,
   ])
+
+  const loadGameFromDatabase = async () => {
+    if (!gameId) return
+
+    try {
+      const response = await fetch(`/api/games/${gameId}`)
+      const data = await response.json()
+
+      if (response.ok && data.game.rounds) {
+        const loadedScores = data.game.rounds.map(
+          (round: any, index: number) => ({
+            round: round.round_number,
+            scores: round.scores,
+            auctionWinner: round.auction_winner
+              ? players.findIndex((p) => p === round.auction_winner)
+              : undefined,
+            initialBid: round.initial_bid,
+            promiseIncreased: round.promise_increased,
+            finalPromise: round.final_promise,
+          }),
+        )
+        setScores(loadedScores)
+        setGameEnded(data.game.completed)
+      }
+    } catch (error) {
+      console.error('Failed to load game from database:', error)
+    }
+  }
+
+  const saveRoundToDatabase = async (newScore: Score) => {
+    if (!isTrackedGame || !gameId) return
+
+    try {
+      const response = await fetch(`/api/games/${gameId}/rounds`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scores: newScore.scores,
+          auction_winner:
+            newScore.auctionWinner !== undefined
+              ? players[newScore.auctionWinner]
+              : undefined,
+          initial_bid: newScore.initialBid,
+          promise_increased: newScore.promiseIncreased,
+          final_promise: newScore.finalPromise,
+        }),
+      })
+
+      if (!response.ok) {
+        console.error('Failed to save round to database')
+      }
+    } catch (error) {
+      console.error('Failed to save round to database:', error)
+    }
+  }
+
+  const completeGameInDatabase = async (
+    winner: string,
+    finalScores: number[],
+  ) => {
+    if (!isTrackedGame || !gameId) return
+
+    try {
+      const gameDurationMinutes = Math.round(
+        (Date.now() - gameStartTime) / (1000 * 60),
+      )
+
+      const response = await fetch(`/api/games/${gameId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          winner,
+          final_scores: finalScores,
+          duration_minutes: gameDurationMinutes,
+          completed: true,
+        }),
+      })
+
+      if (!response.ok) {
+        console.error('Failed to complete game in database')
+      }
+    } catch (error) {
+      console.error('Failed to complete game in database:', error)
+    }
+  }
 
   const getTotalScores = () => {
     const totals = new Array(players.length).fill(0)
@@ -82,7 +184,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
     return totals
   }
 
-  const addRound = () => {
+  const addRound = async () => {
     if (currentRound.some((score) => isNaN(score))) {
       alert('Please enter valid scores for all players')
       return
@@ -102,6 +204,11 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
       finalPromise: promiseIncreased ? finalPromise : initialBid,
     }
 
+    // Save to database first if it's a tracked game
+    if (isTrackedGame) {
+      await saveRoundToDatabase(newScore)
+    }
+
     setScores([...scores, newScore])
     setCurrentRound(new Array(players.length).fill(0))
 
@@ -119,6 +226,12 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
 
     if (newTotals.some((total) => total >= 500)) {
       setGameEnded(true)
+
+      // Complete game in database if it's tracked
+      if (isTrackedGame) {
+        const winnerIndex = newTotals.indexOf(Math.max(...newTotals))
+        await completeGameInDatabase(players[winnerIndex], newTotals)
+      }
     }
   }
 
@@ -343,7 +456,7 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
 
             {initialBid > 0 &&
               currentRound.some(
-                (score, index) => score === 0 && index !== auctionWinner
+                (score, index) => score === 0 && index !== auctionWinner,
               ) && (
                 <button
                   onClick={applyNegativeInitialBid}
@@ -449,8 +562,8 @@ export function ScoreTracker({ players, onResetGame }: ScoreTrackerProps) {
                       total >= 500
                         ? 'text-green-600 font-bold'
                         : total >= 400
-                        ? 'text-orange-600'
-                        : 'text-gray-900'
+                          ? 'text-orange-600'
+                          : 'text-gray-900'
                     }`}
                   >
                     {total}

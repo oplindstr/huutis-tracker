@@ -44,7 +44,9 @@ export default function RootLayout({
         />
         <meta name='apple-mobile-web-app-title' content='Huutopussi' />
       </head>
-      <body className='antialiased'>{children}</body>
+      <body className='antialiased' suppressHydrationWarning={true}>
+        {children}
+      </body>
     </html>
   )
 }
