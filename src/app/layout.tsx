@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { OfflineProvider } from '@/contexts/OfflineContext'
 
 export const metadata: Metadata = {
   title: 'Huutopussi Tracker',
@@ -45,7 +46,7 @@ export default function RootLayout({
         <meta name='apple-mobile-web-app-title' content='Huutopussi' />
       </head>
       <body className='antialiased' suppressHydrationWarning={true}>
-        {children}
+        <OfflineProvider>{children}</OfflineProvider>
       </body>
     </html>
   )

@@ -13,7 +13,7 @@ export default function Home() {
   const [gameStarted, setGameStarted] = useState(false)
   const [currentView, setCurrentView] = useState<AppView>('setup')
   const [isTrackedGame, setIsTrackedGame] = useState(false)
-  const [gameId, setGameId] = useState<number | undefined>()
+  const [gameId, setGameId] = useState<number | string | undefined>()
 
   // Load saved game state from localStorage (for quick games only)
   useEffect(() => {
@@ -27,14 +27,19 @@ export default function Home() {
       setGameStarted(true)
       setCurrentView('game')
       setIsTrackedGame(savedGameType === 'tracked')
-      setGameId(savedGameId ? parseInt(savedGameId) : undefined)
+
+      // Handle both numeric and string game IDs
+      if (savedGameId) {
+        const parsedId = parseInt(savedGameId)
+        setGameId(isNaN(parsedId) ? savedGameId : parsedId)
+      }
     }
   }, [])
 
   const startGame = (
     playerNames: string[],
     isPermanentGame: boolean,
-    newGameId?: number,
+    newGameId?: number | string,
   ) => {
     setPlayers(playerNames)
     setGameStarted(true)

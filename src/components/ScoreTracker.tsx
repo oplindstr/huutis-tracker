@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useOffline } from '@/contexts/OfflineContext'
 
 interface Score {
   round: number
@@ -15,7 +16,7 @@ interface ScoreTrackerProps {
   players: string[]
   onResetGame: () => void
   isTrackedGame: boolean
-  gameId?: number
+  gameId?: number | string // Can be database ID (number) or offline temp ID (string)
 }
 
 export function ScoreTracker({
@@ -30,6 +31,9 @@ export function ScoreTracker({
   )
   const [gameEnded, setGameEnded] = useState(false)
   const [gameStartTime] = useState(Date.now())
+
+  const { isOnline, updateGameOffline } = useOffline()
+  const isOfflineGame = typeof gameId === 'string' && gameId.startsWith('game_')
 
   // Auction tracking for current round
   const [auctionWinner, setAuctionWinner] = useState<number>(-1)
@@ -92,6 +96,9 @@ export function ScoreTracker({
   const loadGameFromDatabase = async () => {
     if (!gameId) return
 
+    // Skip loading for offline games (they start fresh)
+    if (isOfflineGame) return
+
     try {
       const response = await fetch(`/api/games/${gameId}`)
       const data = await response.json()
@@ -120,27 +127,43 @@ export function ScoreTracker({
   const saveRoundToDatabase = async (newScore: Score) => {
     if (!isTrackedGame || !gameId) return
 
-    try {
-      const response = await fetch(`/api/games/${gameId}/rounds`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scores: newScore.scores,
-          auction_winner:
-            newScore.auctionWinner !== undefined
-              ? players[newScore.auctionWinner]
-              : undefined,
-          initial_bid: newScore.initialBid,
-          promise_increased: newScore.promiseIncreased,
-          final_promise: newScore.finalPromise,
-        }),
-      })
-
-      if (!response.ok) {
-        console.error('Failed to save round to database')
+    if (isOfflineGame) {
+      // Save to offline storage
+      try {
+        await updateGameOffline(gameId as string, {
+          rounds_played: scores.length + 1,
+          // Note: We could store rounds data here if needed
+        })
+      } catch (error) {
+        console.error('Failed to save round offline:', error)
       }
-    } catch (error) {
-      console.error('Failed to save round to database:', error)
+      return
+    }
+
+    // Save to online database
+    if (isOnline) {
+      try {
+        const response = await fetch(`/api/games/${gameId}/rounds`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scores: newScore.scores,
+            auction_winner:
+              newScore.auctionWinner !== undefined
+                ? players[newScore.auctionWinner]
+                : undefined,
+            initial_bid: newScore.initialBid,
+            promise_increased: newScore.promiseIncreased,
+            final_promise: newScore.finalPromise,
+          }),
+        })
+
+        if (!response.ok) {
+          console.error('Failed to save round to database')
+        }
+      } catch (error) {
+        console.error('Failed to save round to database:', error)
+      }
     }
   }
 
@@ -150,27 +173,46 @@ export function ScoreTracker({
   ) => {
     if (!isTrackedGame || !gameId) return
 
-    try {
-      const gameDurationMinutes = Math.round(
-        (Date.now() - gameStartTime) / (1000 * 60),
-      )
+    const gameDurationMinutes = Math.round(
+      (Date.now() - gameStartTime) / (1000 * 60),
+    )
 
-      const response = await fetch(`/api/games/${gameId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    if (isOfflineGame) {
+      // Complete offline game
+      try {
+        await updateGameOffline(gameId as string, {
           winner,
           final_scores: finalScores,
           duration_minutes: gameDurationMinutes,
           completed: true,
-        }),
-      })
-
-      if (!response.ok) {
-        console.error('Failed to complete game in database')
+          rounds_played: scores.length,
+        })
+      } catch (error) {
+        console.error('Failed to complete offline game:', error)
       }
-    } catch (error) {
-      console.error('Failed to complete game in database:', error)
+      return
+    }
+
+    // Complete online game
+    if (isOnline) {
+      try {
+        const response = await fetch(`/api/games/${gameId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            winner,
+            final_scores: finalScores,
+            duration_minutes: gameDurationMinutes,
+            completed: true,
+          }),
+        })
+
+        if (!response.ok) {
+          console.error('Failed to complete game in database')
+        }
+      } catch (error) {
+        console.error('Failed to complete game in database:', error)
+      }
     }
   }
 

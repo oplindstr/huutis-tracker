@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { Player } from '@/types/database'
+import { useOffline } from '@/contexts/OfflineContext'
 
 interface PermanentPlayersProps {
   onPlayersChange: (players: Player[]) => void
@@ -20,6 +21,8 @@ export function PermanentPlayers({
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
+  const { isOnline, savePlayerOffline, getLocalPlayers } = useOffline()
+
   useEffect(() => {
     fetchPlayers()
   }, [])
@@ -27,19 +30,46 @@ export function PermanentPlayers({
   const fetchPlayers = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/players')
-      const data = await response.json()
 
-      if (response.ok) {
-        setPlayers(data.players)
-        onPlayersChange(data.players)
+      if (isOnline) {
+        // Try to fetch from remote database
+        const response = await fetch('/api/players')
+        const data = await response.json()
+
+        if (response.ok) {
+          setPlayers(data.players)
+          onPlayersChange(data.players)
+        } else {
+          // Fallback to local players
+          await loadLocalPlayers()
+        }
       } else {
-        setError(data.error || 'Failed to fetch players')
+        // Load from local storage
+        await loadLocalPlayers()
       }
     } catch (err) {
-      setError('Failed to fetch players')
+      console.error('Failed to fetch players:', err)
+      await loadLocalPlayers()
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadLocalPlayers = async () => {
+    try {
+      const localPlayers = await getLocalPlayers()
+      // Convert local players to Player format
+      const formattedPlayers: Player[] = localPlayers.map((p, index) => ({
+        id: parseInt(p.temporary_id.replace('player_', '')) || index,
+        name: p.name,
+        created_at: p.created_at,
+      }))
+
+      setPlayers(formattedPlayers)
+      onPlayersChange(formattedPlayers)
+    } catch (error) {
+      console.error('Failed to load local players:', error)
+      setError('Failed to load players')
     }
   }
 
@@ -67,28 +97,64 @@ export function PermanentPlayers({
       setIsAddingPlayer(true)
       setError('')
 
-      const response = await fetch('/api/players', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newPlayerName.trim() }),
-      })
+      if (isOnline) {
+        // Try to add to remote database
+        const response = await fetch('/api/players', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newPlayerName.trim() }),
+        })
 
-      const data = await response.json()
+        const data = await response.json()
 
-      if (response.ok) {
-        const updatedPlayers = [...players, data.player].sort((a, b) =>
-          a.name.localeCompare(b.name),
-        )
-        setPlayers(updatedPlayers)
-        onPlayersChange(updatedPlayers)
-        setNewPlayerName('')
+        if (response.ok) {
+          const updatedPlayers = [...players, data.player].sort((a, b) =>
+            a.name.localeCompare(b.name),
+          )
+          setPlayers(updatedPlayers)
+          onPlayersChange(updatedPlayers)
+          setNewPlayerName('')
+        } else {
+          // If online but request fails, save offline
+          await addPlayerOffline()
+        }
       } else {
-        setError(data.error || 'Failed to add player')
+        // Save offline
+        await addPlayerOffline()
       }
     } catch (err) {
-      setError('Failed to add player')
+      console.error('Failed to add player:', err)
+      // Fallback to offline save
+      await addPlayerOffline()
     } finally {
       setIsAddingPlayer(false)
+    }
+  }
+
+  const addPlayerOffline = async () => {
+    try {
+      const temporaryId = await savePlayerOffline(newPlayerName.trim())
+
+      // Add to local state immediately
+      const newPlayer: Player = {
+        id: Date.now(), // Temporary ID for UI
+        name: newPlayerName.trim(),
+        created_at: new Date().toISOString(),
+      }
+
+      const updatedPlayers = [...players, newPlayer].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      )
+
+      setPlayers(updatedPlayers)
+      onPlayersChange(updatedPlayers)
+      setNewPlayerName('')
+
+      if (isOnline) {
+        setError('Saved locally - will sync when connection is stable')
+      }
+    } catch (error) {
+      setError('Failed to save player')
     }
   }
 
@@ -119,7 +185,16 @@ export function PermanentPlayers({
 
   return (
     <div className='bg-white rounded-xl shadow-lg p-6 space-y-4'>
-      <h2 className='text-xl font-semibold text-gray-800'>Permanent Players</h2>
+      <div className='flex items-center justify-between'>
+        <h2 className='text-xl font-semibold text-gray-800'>
+          Permanent Players
+        </h2>
+        {!isOnline && (
+          <span className='text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded'>
+            Offline Mode
+          </span>
+        )}
+      </div>
 
       {/* Add New Player */}
       <div className='flex gap-2'>
