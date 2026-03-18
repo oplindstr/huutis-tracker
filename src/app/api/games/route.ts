@@ -24,18 +24,35 @@ export async function POST(request: NextRequest) {
   try {
     await initializeDatabase()
     
-    const { players }: CreateGameRequest = await request.json()
+    const { 
+      players, 
+      winner, 
+      final_scores, 
+      rounds_played, 
+      duration_minutes, 
+      completed 
+    }: CreateGameRequest = await request.json()
     
     if (!players || !Array.isArray(players) || players.length < 2) {
       return NextResponse.json({ error: 'At least 2 players are required' }, { status: 400 })
     }
 
-    // Initialize final_scores as array of zeros
-    const initialScores = new Array(players.length).fill(0)
+    // Use provided final_scores or initialize as array of zeros
+    const gameScores = final_scores || new Array(players.length).fill(0)
+    const gameRounds = rounds_played || 0
+    const gameCompleted = completed || false
+    const gameDuration = duration_minutes || null
     
     const { rows } = await sql`
-      INSERT INTO games (players, final_scores, rounds_played, completed) 
-      VALUES (${JSON.stringify(players)}, ${JSON.stringify(initialScores)}, 0, false) 
+      INSERT INTO games (players, winner, final_scores, rounds_played, duration_minutes, completed) 
+      VALUES (
+        ${JSON.stringify(players)}, 
+        ${winner}, 
+        ${JSON.stringify(gameScores)}, 
+        ${gameRounds}, 
+        ${gameDuration}, 
+        ${gameCompleted}
+      ) 
       RETURNING id, players, winner, final_scores, rounds_played, duration_minutes, completed, created_at
     `
     

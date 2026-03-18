@@ -22,13 +22,18 @@ export default function Home() {
     const savedGameType = localStorage.getItem('huutopussi-game-type')
     const savedGameId = localStorage.getItem('huutopussi-game-id')
 
-    if (savedPlayers && savedGameStarted === 'true') {
+    // Only resume quick games, not tracked games
+    if (
+      savedPlayers &&
+      savedGameStarted === 'true' &&
+      savedGameType === 'quick'
+    ) {
       setPlayers(JSON.parse(savedPlayers))
       setGameStarted(true)
       setCurrentView('game')
-      setIsTrackedGame(savedGameType === 'tracked')
+      setIsTrackedGame(false) // Quick games are never tracked
 
-      // Handle both numeric and string game IDs
+      // Handle both numeric and string game IDs (though quick games typically don't have IDs)
       if (savedGameId) {
         const parsedId = parseInt(savedGameId)
         setGameId(isNaN(parsedId) ? savedGameId : parsedId)
@@ -47,15 +52,27 @@ export default function Home() {
     setIsTrackedGame(isPermanentGame)
     setGameId(newGameId)
 
-    // Save to localStorage
-    localStorage.setItem('huutopussi-players', JSON.stringify(playerNames))
-    localStorage.setItem('huutopussi-game-started', 'true')
-    localStorage.setItem(
-      'huutopussi-game-type',
-      isPermanentGame ? 'tracked' : 'quick',
-    )
-    if (newGameId) {
-      localStorage.setItem('huutopussi-game-id', newGameId.toString())
+    if (isPermanentGame) {
+      // For tracked games, clear any previous localStorage data and don't save new game state
+      // This ensures each tracked game starts completely fresh
+      localStorage.removeItem('huutopussi-players')
+      localStorage.removeItem('huutopussi-game-started')
+      localStorage.removeItem('huutopussi-scores')
+      localStorage.removeItem('huutopussi-rounds')
+      localStorage.removeItem('huutopussi-auction')
+      localStorage.removeItem('huutopussi-game-type')
+      localStorage.removeItem('huutopussi-game-id')
+      localStorage.removeItem('huutopussi-completed')
+      localStorage.removeItem('huutopussi-winner')
+      localStorage.removeItem('huutopussi-start-time')
+    } else {
+      // For quick games, save to localStorage so they can be resumed
+      localStorage.setItem('huutopussi-players', JSON.stringify(playerNames))
+      localStorage.setItem('huutopussi-game-started', 'true')
+      localStorage.setItem('huutopussi-game-type', 'quick')
+      if (newGameId) {
+        localStorage.setItem('huutopussi-game-id', newGameId.toString())
+      }
     }
   }
 

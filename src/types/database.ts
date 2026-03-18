@@ -41,6 +41,11 @@ export interface PlayerStatistics {
 
 export interface CreateGameRequest {
   players: string[]
+  winner?: string
+  final_scores?: number[]
+  rounds_played?: number
+  duration_minutes?: number
+  completed?: boolean
 }
 
 export interface UpdateGameRequest {
