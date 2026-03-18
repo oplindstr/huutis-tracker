@@ -155,8 +155,6 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
       throw error
     }
-    await checkPendingSync()
-    return tempId
   }
 
   const updateGameOffline = async (
