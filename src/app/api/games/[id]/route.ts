@@ -103,3 +103,33 @@ export async function PATCH(
     return NextResponse.json({ error: 'Failed to update game' }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await initializeDatabase()
+    
+    const { id } = await params
+    const gameId = parseInt(id)
+    if (isNaN(gameId)) {
+      return NextResponse.json({ error: 'Invalid game ID' }, { status: 400 })
+    }
+    
+    // Delete game rounds first (foreign key constraint)
+    await sql`DELETE FROM game_rounds WHERE game_id = ${gameId}`
+    
+    // Delete the game
+    const { rowCount } = await sql`DELETE FROM games WHERE id = ${gameId}`
+    
+    if (rowCount === 0) {
+      return NextResponse.json({ error: 'Game not found' }, { status: 404 })
+    }
+    
+    return NextResponse.json({ message: 'Game deleted successfully' })
+  } catch (error) {
+    console.error('Failed to delete game:', error)
+    return NextResponse.json({ error: 'Failed to delete game' }, { status: 500 })
+  }
+}

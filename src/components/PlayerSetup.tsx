@@ -21,7 +21,7 @@ export const PlayerSetup = ({ onStartGame }: PlayerSetupProps) => {
   const [gameMode, setGameMode] = useState<'manual' | 'permanent'>('permanent')
   const [error, setError] = useState('')
 
-  const { isOnline, saveGameOffline } = useOffline()
+  const { isOnline } = useOffline()
 
   const updateManualPlayer = (index: number, name: string) => {
     const updated = [...manualPlayers]

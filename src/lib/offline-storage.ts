@@ -319,6 +319,20 @@ class OfflineStorageService {
     })
   }
 
+  // Delete game from offline storage
+  async deleteGameOffline(temporaryId: string): Promise<void> {
+    return this.executeWithRetry(async (db) => {
+      return new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction([this.gamesStore], 'readwrite')
+        const store = transaction.objectStore(this.gamesStore)
+        const request = store.delete(temporaryId)
+        
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(request.error)
+      })
+    })
+  }
+
   // Check if we have sync pending
   async hasPendingSync(): Promise<boolean> {
     const [unsyncedGames, unsyncedPlayers] = await Promise.all([

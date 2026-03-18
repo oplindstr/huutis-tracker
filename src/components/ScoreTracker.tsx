@@ -35,8 +35,16 @@ export function ScoreTracker({
     initialGameId,
   )
 
-  const { isOnline, updateGameOffline, saveGameOffline } = useOffline()
+  const { syncCurrentGame, deleteLocalGame } = useOffline()
   const isOfflineGame = typeof gameId === 'string' && gameId.startsWith('game_')
+
+  // Always save players to localStorage for sync
+  useEffect(() => {
+    localStorage.setItem('huutopussi-players', JSON.stringify(players))
+    if (!localStorage.getItem('huutopussi-start-time')) {
+      localStorage.setItem('huutopussi-start-time', Date.now().toString())
+    }
+  }, [players])
 
   // Auction tracking for current round
   const [auctionWinner, setAuctionWinner] = useState<number>(-1)
@@ -44,48 +52,44 @@ export function ScoreTracker({
   const [promiseIncreased, setPromiseIncreased] = useState<boolean>(false)
   const [finalPromise, setFinalPromise] = useState<number>(0)
 
-  // Load saved scores and auction data from localStorage (for quick games) or database (for tracked games)
+  // Load saved game data from localStorage
   useEffect(() => {
-    if (!isTrackedGame) {
-      // For quick games, use localStorage as before
-      const savedScores = localStorage.getItem('huutopussi-scores')
-      const savedRounds = localStorage.getItem('huutopussi-rounds')
-      const savedAuction = localStorage.getItem('huutopussi-auction')
+    const savedScores = localStorage.getItem('huutopussi-scores')
+    const savedRounds = localStorage.getItem('huutopussi-rounds')
+    const savedAuction = localStorage.getItem('huutopussi-auction')
+    const savedCompleted = localStorage.getItem('huutopussi-completed')
 
-      if (savedScores) {
-        setScores(JSON.parse(savedScores))
-      }
-      if (savedRounds) {
-        setCurrentRound(JSON.parse(savedRounds))
-      }
-      if (savedAuction) {
-        const auctionData = JSON.parse(savedAuction)
-        setAuctionWinner(auctionData.auctionWinner || -1)
-        setInitialBid(auctionData.initialBid || 0)
-        setPromiseIncreased(auctionData.promiseIncreased || false)
-        setFinalPromise(auctionData.finalPromise || 0)
-      }
-    } else if (gameId) {
-      // For tracked games, load from database
-      loadGameFromDatabase()
+    if (savedScores) {
+      setScores(JSON.parse(savedScores))
     }
-  }, [isTrackedGame, gameId])
+    if (savedRounds) {
+      setCurrentRound(JSON.parse(savedRounds))
+    }
+    if (savedAuction) {
+      const auctionData = JSON.parse(savedAuction)
+      setAuctionWinner(auctionData.auctionWinner || -1)
+      setInitialBid(auctionData.initialBid || 0)
+      setPromiseIncreased(auctionData.promiseIncreased || false)
+      setFinalPromise(auctionData.finalPromise || 0)
+    }
+    if (savedCompleted === 'true') {
+      setGameEnded(true)
+    }
+  }, [])
 
-  // Save to localStorage for quick games
+  // Always save to localStorage as primary storage
   useEffect(() => {
-    if (!isTrackedGame) {
-      localStorage.setItem('huutopussi-scores', JSON.stringify(scores))
-      localStorage.setItem('huutopussi-rounds', JSON.stringify(currentRound))
-      localStorage.setItem(
-        'huutopussi-auction',
-        JSON.stringify({
-          auctionWinner,
-          initialBid,
-          promiseIncreased,
-          finalPromise,
-        }),
-      )
-    }
+    localStorage.setItem('huutopussi-scores', JSON.stringify(scores))
+    localStorage.setItem('huutopussi-rounds', JSON.stringify(currentRound))
+    localStorage.setItem(
+      'huutopussi-auction',
+      JSON.stringify({
+        auctionWinner,
+        initialBid,
+        promiseIncreased,
+        finalPromise,
+      }),
+    )
   }, [
     scores,
     currentRound,
@@ -93,199 +97,7 @@ export function ScoreTracker({
     initialBid,
     promiseIncreased,
     finalPromise,
-    isTrackedGame,
   ])
-
-  const loadGameFromDatabase = async () => {
-    if (!gameId) return
-
-    // Skip loading for offline games (they start fresh)
-    const isOfflineGameCurrent =
-      typeof gameId === 'string' && gameId.startsWith('game_')
-    if (isOfflineGameCurrent) return
-
-    try {
-      const response = await fetch(`/api/games/${gameId}`)
-      const data = await response.json()
-
-      if (response.ok && data.game.rounds) {
-        const loadedScores = data.game.rounds.map(
-          (round: any, index: number) => ({
-            round: round.round_number,
-            scores: round.scores,
-            auctionWinner: round.auction_winner
-              ? players.findIndex((p) => p === round.auction_winner)
-              : undefined,
-            initialBid: round.initial_bid,
-            promiseIncreased: round.promise_increased,
-            finalPromise: round.final_promise,
-          }),
-        )
-        setScores(loadedScores)
-        setGameEnded(data.game.completed)
-      }
-    } catch (error) {
-      console.error('Failed to load game from database:', error)
-    }
-  }
-
-  const createGameInDatabase = async () => {
-    if (!isTrackedGame) return null
-
-    try {
-      if (isOnline) {
-        // Create game online
-        const response = await fetch('/api/games', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ players }),
-        })
-
-        const data = await response.json()
-
-        if (response.ok) {
-          const newGameId = data.game.id
-          setGameId(newGameId)
-          return newGameId
-        } else {
-          throw new Error('Failed to create online game')
-        }
-      } else {
-        // Create game offline
-        const newGameId = await saveGameOffline({
-          players,
-          final_scores: new Array(players.length).fill(0),
-          rounds_played: 0,
-          completed: false,
-        })
-        setGameId(newGameId)
-        return newGameId
-      }
-    } catch (error) {
-      console.error('Failed to create game:', error)
-      // Fallback to offline
-      try {
-        const newGameId = await saveGameOffline({
-          players,
-          final_scores: new Array(players.length).fill(0),
-          rounds_played: 0,
-          completed: false,
-        })
-        setGameId(newGameId)
-        return newGameId
-      } catch (offlineError) {
-        console.error('Failed to create offline game:', offlineError)
-        return null
-      }
-    }
-  }
-
-  const saveRoundToDatabase = async (newScore: Score) => {
-    if (!isTrackedGame) return
-
-    // Create game if it doesn't exist yet (first round)
-    let currentGameId = gameId
-    if (!currentGameId) {
-      currentGameId = await createGameInDatabase()
-      if (!currentGameId) {
-        console.error('Could not create game, skipping database save')
-        return
-      }
-    }
-
-    const isOfflineGameCurrent =
-      typeof currentGameId === 'string' && currentGameId.startsWith('game_')
-    if (isOfflineGameCurrent) {
-      // Save to offline storage
-      try {
-        await updateGameOffline(currentGameId as string, {
-          rounds_played: scores.length + 1,
-          // Note: We could store rounds data here if needed
-        })
-      } catch (error) {
-        console.error('Failed to save round offline:', error)
-      }
-      return
-    }
-
-    // Save to online database
-    if (isOnline) {
-      try {
-        const response = await fetch(`/api/games/${currentGameId}/rounds`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            scores: newScore.scores,
-            auction_winner:
-              newScore.auctionWinner !== undefined
-                ? players[newScore.auctionWinner]
-                : undefined,
-            initial_bid: newScore.initialBid,
-            promise_increased: newScore.promiseIncreased,
-            final_promise: newScore.finalPromise,
-          }),
-        })
-
-        if (!response.ok) {
-          console.error('Failed to save round to database')
-        }
-      } catch (error) {
-        console.error('Failed to save round to database:', error)
-      }
-    }
-  }
-
-  const completeGameInDatabase = async (
-    winner: string,
-    finalScores: number[],
-  ) => {
-    if (!isTrackedGame || !gameId) return
-
-    const gameDurationMinutes = Math.round(
-      (Date.now() - gameStartTime) / (1000 * 60),
-    )
-
-    const isOfflineGameCurrent =
-      typeof gameId === 'string' && gameId.startsWith('game_')
-
-    if (isOfflineGameCurrent) {
-      // Complete offline game
-      try {
-        await updateGameOffline(gameId as string, {
-          winner,
-          final_scores: finalScores,
-          duration_minutes: gameDurationMinutes,
-          completed: true,
-          rounds_played: scores.length,
-        })
-      } catch (error) {
-        console.error('Failed to complete offline game:', error)
-      }
-      return
-    }
-
-    // Complete online game
-    if (isOnline) {
-      try {
-        const response = await fetch(`/api/games/${gameId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            winner,
-            final_scores: finalScores,
-            duration_minutes: gameDurationMinutes,
-            completed: true,
-          }),
-        })
-
-        if (!response.ok) {
-          console.error('Failed to complete game in database')
-        }
-      } catch (error) {
-        console.error('Failed to complete game in database:', error)
-      }
-    }
-  }
 
   const getTotalScores = () => {
     const totals = new Array(players.length).fill(0)
@@ -317,11 +129,7 @@ export function ScoreTracker({
       finalPromise: promiseIncreased ? finalPromise : initialBid,
     }
 
-    // Save to database first if it's a tracked game
-    if (isTrackedGame) {
-      await saveRoundToDatabase(newScore)
-    }
-
+    // Save to localStorage first (already handled by useEffect)
     setScores([...scores, newScore])
     setCurrentRound(new Array(players.length).fill(0))
 
@@ -338,13 +146,12 @@ export function ScoreTracker({
     })
 
     if (newTotals.some((total) => total >= 500)) {
-      setGameEnded(true)
+      const winnerIndex = newTotals.indexOf(Math.max(...newTotals))
+      const winner = players[winnerIndex]
 
-      // Complete game in database if it's tracked
-      if (isTrackedGame) {
-        const winnerIndex = newTotals.indexOf(Math.max(...newTotals))
-        await completeGameInDatabase(players[winnerIndex], newTotals)
-      }
+      setGameEnded(true)
+      localStorage.setItem('huutopussi-completed', 'true')
+      localStorage.setItem('huutopussi-winner', winner)
     }
   }
 
@@ -408,6 +215,8 @@ export function ScoreTracker({
     if (scores.length > 0) {
       setScores(scores.slice(0, -1))
       setGameEnded(false)
+      localStorage.removeItem('huutopussi-completed')
+      localStorage.removeItem('huutopussi-winner')
       // Reset auction state when deleting rounds
       setAuctionWinner(-1)
       setInitialBid(0)
@@ -416,7 +225,30 @@ export function ScoreTracker({
     }
   }
 
+  const handleSyncGame = async () => {
+    try {
+      await syncCurrentGame()
+      alert('Game synced successfully!')
+    } catch (error) {
+      alert(
+        `Failed to sync game: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      )
+    }
+  }
+
+  const handleDeleteGame = async () => {
+    if (
+      confirm(
+        'Are you sure you want to delete this game? This cannot be undone.',
+      )
+    ) {
+      deleteLocalGame()
+      onResetGame()
+    }
+  }
+
   const totalScores = getTotalScores()
+
   const winner = gameEnded
     ? players[totalScores.indexOf(Math.max(...totalScores))]
     : null
@@ -427,12 +259,21 @@ export function ScoreTracker({
       <div className='bg-green-600 text-white p-4'>
         <div className='flex justify-between items-center'>
           <h1 className='text-xl font-bold'>🃏 Huutopussi</h1>
-          <button
-            onClick={onResetGame}
-            className='text-sm bg-green-700 px-3 py-1 rounded hover:bg-green-800 transition-colors'
-          >
-            New Game
-          </button>
+          <div className='flex gap-2'>
+            <button
+              onClick={handleDeleteGame}
+              className='text-sm bg-red-600 px-3 py-1 rounded hover:bg-red-700 transition-colors'
+              title='Delete this game permanently'
+            >
+              Delete Game
+            </button>
+            <button
+              onClick={onResetGame}
+              className='text-sm bg-green-700 px-3 py-1 rounded hover:bg-green-800 transition-colors'
+            >
+              New Game
+            </button>
+          </div>
         </div>
         <p className='text-green-100 text-sm'>Round {scores.length + 1}</p>
       </div>
@@ -603,6 +444,24 @@ export function ScoreTracker({
             </button>
           )}
         </div>
+
+        {/* Game Actions */}
+        {scores.length > 0 && (
+          <div className='flex gap-2 mb-4'>
+            <button
+              onClick={handleSyncGame}
+              className='flex-1 py-2 bg-blue-600 text-white text-sm font-semibold rounded hover:bg-blue-700 transition-colors'
+            >
+              Sync to Database
+            </button>
+            <button
+              onClick={handleDeleteGame}
+              className='flex-1 py-2 bg-red-600 text-white text-sm font-semibold rounded hover:bg-red-700 transition-colors'
+            >
+              Delete Game
+            </button>
+          </div>
+        )}
 
         <div className='overflow-x-auto'>
           <table className='w-full text-sm'>
