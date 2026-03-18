@@ -20,8 +20,18 @@ export function PermanentPlayers({
   const [isAddingPlayer, setIsAddingPlayer] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [usingCachedData, setUsingCachedData] = useState(false)
+  const [cacheAge, setCacheAge] = useState<string>('')
 
-  const { isOnline, savePlayerOffline, getLocalPlayers } = useOffline()
+  const {
+    isOnline,
+    savePlayerOffline,
+    getLocalPlayers,
+    cacheRemotePlayers,
+    getAllPlayersForUI,
+    isCacheStale,
+    refreshPlayersCache,
+  } = useOffline()
 
   useEffect(() => {
     fetchPlayers()
@@ -32,33 +42,137 @@ export function PermanentPlayers({
       setLoading(true)
 
       if (isOnline) {
-        // Try to fetch from remote database
-        const response = await fetch('/api/players')
-        const data = await response.json()
+        // Check if cache is stale (older than 30 minutes)
+        const cacheIsStale = await isCacheStale(30)
 
-        if (response.ok) {
-          setPlayers(data.players)
-          onPlayersChange(data.players)
+        if (cacheIsStale) {
+          // Try to fetch fresh data from remote database
+          try {
+            const response = await fetch('/api/players')
+            const data = await response.json()
+
+            if (response.ok) {
+              // Cache the remote players for offline use
+              await cacheRemotePlayers(data.players)
+
+              // Get combined players (cached + pending)
+              const combinedPlayers = await getAllPlayersForUI()
+              const formattedPlayers = combinedPlayers.map((p) => ({
+                id: p.id,
+                name: p.name,
+                created_at: p.created_at,
+              }))
+
+              setPlayers(formattedPlayers)
+              onPlayersChange(formattedPlayers)
+              setUsingCachedData(false)
+              setCacheAge('')
+            } else {
+              // Fallback to cached/local players
+              await loadCachedAndLocalPlayers()
+            }
+          } catch (fetchError) {
+            console.error('Failed to fetch remote players:', fetchError)
+            // Fallback to cached/local players
+            await loadCachedAndLocalPlayers()
+          }
         } else {
-          // Fallback to local players
-          await loadLocalPlayers()
+          // Use cached data since it's still fresh
+          setUsingCachedData(true)
+          const lastCache = localStorage.getItem('players_cache_timestamp')
+          if (lastCache) {
+            const cacheDate = new Date(parseInt(lastCache))
+            const now = new Date()
+            const diffMinutes = Math.floor(
+              (now.getTime() - cacheDate.getTime()) / 60000,
+            )
+            setCacheAge(
+              diffMinutes < 60
+                ? `${diffMinutes}m ago`
+                : `${Math.floor(diffMinutes / 60)}h ago`,
+            )
+          }
+          await loadCachedAndLocalPlayers()
         }
       } else {
-        // Load from local storage
-        await loadLocalPlayers()
+        // Load from cached and local storage when offline
+        setUsingCachedData(true)
+        const lastCache = localStorage.getItem('players_cache_timestamp')
+        if (lastCache) {
+          const cacheDate = new Date(parseInt(lastCache))
+          const now = new Date()
+          const diffMinutes = Math.floor(
+            (now.getTime() - cacheDate.getTime()) / 60000,
+          )
+          setCacheAge(
+            diffMinutes < 60
+              ? `${diffMinutes}m ago`
+              : `${Math.floor(diffMinutes / 60)}h ago`,
+          )
+        } else {
+          setCacheAge('No cache')
+        }
+        await loadCachedAndLocalPlayers()
       }
     } catch (err) {
       console.error('Failed to fetch players:', err)
-      await loadLocalPlayers()
+      await loadCachedAndLocalPlayers()
     } finally {
       setLoading(false)
     }
   }
+  const handleRefresh = async () => {
+    if (!isOnline) return
+
+    try {
+      setLoading(true)
+      await refreshPlayersCache()
+      await fetchPlayers()
+    } catch (error) {
+      console.error('Failed to refresh:', error)
+      setError('Failed to refresh players')
+    } finally {
+      setLoading(false)
+    }
+  }
+  const loadCachedAndLocalPlayers = async () => {
+    try {
+      const combinedPlayers = await getAllPlayersForUI()
+      const formattedPlayers: Player[] = combinedPlayers.map((p) => ({
+        id: p.id,
+        name: p.name,
+        created_at: p.created_at,
+      }))
+
+      setPlayers(formattedPlayers)
+      onPlayersChange(formattedPlayers)
+      // Update cache status information
+      setUsingCachedData(true)
+      const lastCache = localStorage.getItem('players_cache_timestamp')
+      if (lastCache) {
+        const cacheDate = new Date(parseInt(lastCache))
+        const now = new Date()
+        const diffMinutes = Math.floor(
+          (now.getTime() - cacheDate.getTime()) / 60000,
+        )
+        setCacheAge(
+          diffMinutes < 60
+            ? `${diffMinutes}m ago`
+            : `${Math.floor(diffMinutes / 60)}h ago`,
+        )
+      } else {
+        setCacheAge('Local only')
+      }
+    } catch (error) {
+      console.error('Failed to load players:', error)
+      setError('Failed to load players')
+    }
+  }
 
   const loadLocalPlayers = async () => {
+    // Fallback to old method for compatibility
     try {
       const localPlayers = await getLocalPlayers()
-      // Convert local players to Player format
       const formattedPlayers: Player[] = localPlayers.map((p, index) => ({
         id: parseInt(p.temporary_id.replace('player_', '')) || index,
         name: p.name,
@@ -171,9 +285,7 @@ export function PermanentPlayers({
   if (loading) {
     return (
       <div className='bg-white rounded-xl shadow-lg p-6 space-y-4'>
-        <h2 className='text-xl font-semibold text-gray-800'>
-          Permanent Players
-        </h2>
+        <h2 className='text-xl font-semibold text-gray-800'>Players</h2>
         <div className='animate-pulse space-y-2'>
           <div className='h-4 bg-gray-200 rounded w-3/4'></div>
           <div className='h-4 bg-gray-200 rounded w-1/2'></div>
@@ -186,14 +298,28 @@ export function PermanentPlayers({
   return (
     <div className='bg-white rounded-xl shadow-lg p-6 space-y-4'>
       <div className='flex items-center justify-between'>
-        <h2 className='text-xl font-semibold text-gray-800'>
-          Permanent Players
-        </h2>
-        {!isOnline && (
-          <span className='text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded'>
-            Offline Mode
-          </span>
-        )}
+        <h2 className='text-xl font-semibold text-gray-800'>Players</h2>
+        <div className='flex items-center gap-2'>
+          {isOnline && (
+            <button
+              onClick={handleRefresh}
+              disabled={loading}
+              className='text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200 transition-colors disabled:opacity-50'
+            >
+              {loading ? '↻' : '🔄'} Refresh
+            </button>
+          )}
+          {usingCachedData && cacheAge && (
+            <span className='text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded'>
+              📦 {cacheAge}
+            </span>
+          )}
+          {!isOnline && (
+            <span className='text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded'>
+              📱 Offline
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Add New Player */}
@@ -222,7 +348,7 @@ export function PermanentPlayers({
       {/* Player List */}
       {players.length === 0 ? (
         <div className='text-gray-500 text-center py-4 italic'>
-          No players yet. Add some permanent players above!
+          No players yet. Add some players above!
         </div>
       ) : (
         <div className='space-y-2 max-h-64 overflow-y-auto'>

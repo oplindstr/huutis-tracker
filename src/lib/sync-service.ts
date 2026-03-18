@@ -60,14 +60,18 @@ class SyncService {
       // If nothing to sync
       if (this.syncStatus.totalItems === 0) {
         this.syncStatus.inProgress = false
+        // Still refresh cache even if nothing to sync
+        await this.refreshPlayersCache()
         return this.syncStatus
       }
 
       // Sync players first (games might depend on them)
+      let playersSynced = false
       for (const player of unsyncedPlayers) {
         try {
           await this.syncPlayer(player)
           this.syncStatus.syncedItems++
+          playersSynced = true
         } catch (error) {
           console.error('Failed to sync player:', player.name, error)
           this.syncStatus.errors.push(`Failed to sync player "${player.name}": ${error}`)
@@ -88,6 +92,11 @@ class SyncService {
       // Clean up synced data if no errors
       if (this.syncStatus.errors.length === 0) {
         await offlineStorage.clearSyncedData()
+      }
+
+      // Refresh players cache if players were synced or if it's stale
+      if (playersSynced || await offlineStorage.isCacheStale(30)) {
+        await this.refreshPlayersCache()
       }
 
     } catch (error) {
@@ -204,6 +213,27 @@ class SyncService {
     }
 
     return await this.syncAllData()
+  }
+
+  // Refresh the players cache with latest remote data
+  async refreshPlayersCache(): Promise<void> {
+    if (!this.isOnline()) {
+      console.log('Cannot refresh cache while offline')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/players')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.players) {
+          await offlineStorage.cacheRemotePlayers(data.players)
+          console.log('Players cache refreshed successfully')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to refresh players cache:', error)
+    }
   }
 }
 

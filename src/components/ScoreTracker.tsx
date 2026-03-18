@@ -23,7 +23,7 @@ export function ScoreTracker({
   players,
   onResetGame,
   isTrackedGame,
-  gameId,
+  gameId: initialGameId,
 }: ScoreTrackerProps) {
   const [scores, setScores] = useState<Score[]>([])
   const [currentRound, setCurrentRound] = useState<number[]>(
@@ -31,8 +31,11 @@ export function ScoreTracker({
   )
   const [gameEnded, setGameEnded] = useState(false)
   const [gameStartTime] = useState(Date.now())
+  const [gameId, setGameId] = useState<number | string | undefined>(
+    initialGameId,
+  )
 
-  const { isOnline, updateGameOffline } = useOffline()
+  const { isOnline, updateGameOffline, saveGameOffline } = useOffline()
   const isOfflineGame = typeof gameId === 'string' && gameId.startsWith('game_')
 
   // Auction tracking for current round
@@ -97,7 +100,9 @@ export function ScoreTracker({
     if (!gameId) return
 
     // Skip loading for offline games (they start fresh)
-    if (isOfflineGame) return
+    const isOfflineGameCurrent =
+      typeof gameId === 'string' && gameId.startsWith('game_')
+    if (isOfflineGameCurrent) return
 
     try {
       const response = await fetch(`/api/games/${gameId}`)
@@ -124,13 +129,76 @@ export function ScoreTracker({
     }
   }
 
-  const saveRoundToDatabase = async (newScore: Score) => {
-    if (!isTrackedGame || !gameId) return
+  const createGameInDatabase = async () => {
+    if (!isTrackedGame) return null
 
-    if (isOfflineGame) {
+    try {
+      if (isOnline) {
+        // Create game online
+        const response = await fetch('/api/games', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ players }),
+        })
+
+        const data = await response.json()
+
+        if (response.ok) {
+          const newGameId = data.game.id
+          setGameId(newGameId)
+          return newGameId
+        } else {
+          throw new Error('Failed to create online game')
+        }
+      } else {
+        // Create game offline
+        const newGameId = await saveGameOffline({
+          players,
+          final_scores: new Array(players.length).fill(0),
+          rounds_played: 0,
+          completed: false,
+        })
+        setGameId(newGameId)
+        return newGameId
+      }
+    } catch (error) {
+      console.error('Failed to create game:', error)
+      // Fallback to offline
+      try {
+        const newGameId = await saveGameOffline({
+          players,
+          final_scores: new Array(players.length).fill(0),
+          rounds_played: 0,
+          completed: false,
+        })
+        setGameId(newGameId)
+        return newGameId
+      } catch (offlineError) {
+        console.error('Failed to create offline game:', offlineError)
+        return null
+      }
+    }
+  }
+
+  const saveRoundToDatabase = async (newScore: Score) => {
+    if (!isTrackedGame) return
+
+    // Create game if it doesn't exist yet (first round)
+    let currentGameId = gameId
+    if (!currentGameId) {
+      currentGameId = await createGameInDatabase()
+      if (!currentGameId) {
+        console.error('Could not create game, skipping database save')
+        return
+      }
+    }
+
+    const isOfflineGameCurrent =
+      typeof currentGameId === 'string' && currentGameId.startsWith('game_')
+    if (isOfflineGameCurrent) {
       // Save to offline storage
       try {
-        await updateGameOffline(gameId as string, {
+        await updateGameOffline(currentGameId as string, {
           rounds_played: scores.length + 1,
           // Note: We could store rounds data here if needed
         })
@@ -143,7 +211,7 @@ export function ScoreTracker({
     // Save to online database
     if (isOnline) {
       try {
-        const response = await fetch(`/api/games/${gameId}/rounds`, {
+        const response = await fetch(`/api/games/${currentGameId}/rounds`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -177,7 +245,10 @@ export function ScoreTracker({
       (Date.now() - gameStartTime) / (1000 * 60),
     )
 
-    if (isOfflineGame) {
+    const isOfflineGameCurrent =
+      typeof gameId === 'string' && gameId.startsWith('game_')
+
+    if (isOfflineGameCurrent) {
       // Complete offline game
       try {
         await updateGameOffline(gameId as string, {

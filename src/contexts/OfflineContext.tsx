@@ -14,6 +14,10 @@ interface OfflineContextType {
   savePlayerOffline: (name: string) => Promise<string>
   updateGameOffline: (gameId: string, updates: any) => Promise<void>
   getLocalPlayers: () => Promise<any[]>
+  cacheRemotePlayers: (players: any[]) => Promise<void>
+  getAllPlayersForUI: () => Promise<any[]>
+  isCacheStale: (maxAgeMinutes?: number) => Promise<boolean>
+  refreshPlayersCache: () => Promise<void>
 }
 
 const OfflineContext = createContext<OfflineContextType | undefined>(undefined)
@@ -57,6 +61,25 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       setHasPendingSync(pending)
     } catch (error) {
       console.error('Failed to check pending sync:', error)
+
+      // If it's an IndexedDB issue, try to inform the user and reset
+      if (
+        error instanceof Error &&
+        (error.message.includes('object store') ||
+          error.message.includes('IDBDatabase') ||
+          error.name === 'NotFoundError')
+      ) {
+        console.log('IndexedDB corruption detected, attempting to reset...')
+        // Don't fail silently, but also don't break the app
+        setHasPendingSync(false)
+        setSyncStatus((prev) => ({
+          ...prev,
+          errors: [...prev.errors, 'Offline storage reset due to corruption'],
+        }))
+      } else {
+        // Other errors should still be handled normally
+        setHasPendingSync(false)
+      }
     }
   }
 
@@ -77,23 +100,61 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   }
 
   const saveGameOffline = async (gameData: any): Promise<string> => {
-    const tempId = await offlineStorage.saveGameOffline({
-      id: '', // Will be set by server
-      players: gameData.players,
-      winner: gameData.winner,
-      final_scores: gameData.final_scores || [],
-      rounds_played: gameData.rounds_played || 0,
-      duration_minutes: gameData.duration_minutes,
-      completed: gameData.completed || false,
-      created_at: new Date().toISOString(),
-    })
+    try {
+      const tempId = await offlineStorage.saveGameOffline({
+        id: '', // Will be set by server
+        players: gameData.players,
+        winner: gameData.winner,
+        final_scores: gameData.final_scores || [],
+        rounds_played: gameData.rounds_played || 0,
+        duration_minutes: gameData.duration_minutes,
+        completed: gameData.completed || false,
+        created_at: new Date().toISOString(),
+      })
 
-    await checkPendingSync()
-    return tempId
+      await checkPendingSync()
+      return tempId
+    } catch (error) {
+      console.error('Failed to save game offline:', error)
+
+      // For IndexedDB errors, provide a more specific error message
+      if (
+        error instanceof Error &&
+        (error.message.includes('object store') ||
+          error.message.includes('IDBDatabase') ||
+          error.name === 'NotFoundError')
+      ) {
+        throw new Error(
+          'Offline storage unavailable. Please try refreshing the page.',
+        )
+      }
+
+      throw error
+    }
   }
 
   const savePlayerOffline = async (name: string): Promise<string> => {
-    const tempId = await offlineStorage.savePlayerOffline(name)
+    try {
+      const tempId = await offlineStorage.savePlayerOffline(name)
+      await checkPendingSync()
+      return tempId
+    } catch (error) {
+      console.error('Failed to save player offline:', error)
+
+      // For IndexedDB errors, provide a more specific error message
+      if (
+        error instanceof Error &&
+        (error.message.includes('object store') ||
+          error.message.includes('IDBDatabase') ||
+          error.name === 'NotFoundError')
+      ) {
+        throw new Error(
+          'Offline storage unavailable. Please try refreshing the page.',
+        )
+      }
+
+      throw error
+    }
     await checkPendingSync()
     return tempId
   }
@@ -110,6 +171,22 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     return await offlineStorage.getAllLocalPlayers()
   }
 
+  const cacheRemotePlayers = async (players: any[]): Promise<void> => {
+    await offlineStorage.cacheRemotePlayers(players)
+  }
+
+  const getAllPlayersForUI = async () => {
+    return await offlineStorage.getAllPlayersForUI()
+  }
+
+  const isCacheStale = async (maxAgeMinutes?: number): Promise<boolean> => {
+    return await offlineStorage.isCacheStale(maxAgeMinutes)
+  }
+
+  const refreshPlayersCache = async (): Promise<void> => {
+    await syncService.refreshPlayersCache()
+  }
+
   const value: OfflineContextType = {
     isOnline,
     syncStatus,
@@ -119,6 +196,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     savePlayerOffline,
     updateGameOffline,
     getLocalPlayers,
+    cacheRemotePlayers,
+    getAllPlayersForUI,
+    isCacheStale,
+    refreshPlayersCache,
   }
 
   return (

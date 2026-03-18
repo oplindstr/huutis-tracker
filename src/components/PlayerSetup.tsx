@@ -18,7 +18,7 @@ export const PlayerSetup = ({ onStartGame }: PlayerSetupProps) => {
   const [selectedPermanentPlayers, setSelectedPermanentPlayers] = useState<
     Player[]
   >([])
-  const [gameMode, setGameMode] = useState<'manual' | 'permanent'>('manual')
+  const [gameMode, setGameMode] = useState<'manual' | 'permanent'>('permanent')
   const [error, setError] = useState('')
 
   const { isOnline, saveGameOffline } = useOffline()
@@ -52,60 +52,11 @@ export const PlayerSetup = ({ onStartGame }: PlayerSetupProps) => {
   }
 
   const startGame = async (players: string[], isPermanentGame: boolean) => {
-    if (isPermanentGame) {
-      try {
-        if (isOnline) {
-          // Try to create game online
-          const response = await fetch('/api/games', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ players }),
-          })
-
-          const data = await response.json()
-
-          if (response.ok) {
-            onStartGame(players, true, data.game.id)
-          } else {
-            // If online but request fails, create offline
-            await createGameOffline(players, isPermanentGame)
-          }
-        } else {
-          // Create offline
-          await createGameOffline(players, isPermanentGame)
-        }
-      } catch (err) {
-        console.error('Failed to create online game:', err)
-        // Fallback to offline
-        await createGameOffline(players, isPermanentGame)
-      }
-    } else {
-      onStartGame(players, false)
-    }
+    // Don't create database entry yet - wait until first scoring
+    onStartGame(players, isPermanentGame)
   }
 
-  const createGameOffline = async (
-    players: string[],
-    isPermanentGame: boolean,
-  ) => {
-    try {
-      const gameId = await saveGameOffline({
-        players,
-        final_scores: new Array(players.length).fill(0),
-        rounds_played: 0,
-        completed: false,
-      })
-
-      onStartGame(players, isPermanentGame, gameId)
-
-      if (isOnline) {
-        setError('Game created locally - will sync when connection is stable')
-      }
-    } catch (error) {
-      console.error('Failed to create offline game:', error)
-      setError('Failed to create game')
-    }
-  }
+  // Game creation now happens when first hand is scored
 
   const handleStartGame = () => {
     let playersToUse: string[] = []
@@ -150,19 +101,6 @@ export const PlayerSetup = ({ onStartGame }: PlayerSetupProps) => {
           </h2>
           <div className='flex gap-4'>
             <button
-              onClick={() => setGameMode('manual')}
-              className={`flex-1 py-3 px-4 rounded-lg border-2 transition-colors ${
-                gameMode === 'manual'
-                  ? 'border-green-500 bg-green-50 text-green-700'
-                  : 'border-gray-300 text-gray-700 hover:border-gray-400'
-              }`}
-            >
-              <div className='font-medium'>Quick Game</div>
-              <div className='text-sm opacity-75'>
-                Enter player names manually
-              </div>
-            </button>
-            <button
               onClick={() => setGameMode('permanent')}
               className={`flex-1 py-3 px-4 rounded-lg border-2 transition-colors ${
                 gameMode === 'permanent'
@@ -173,6 +111,19 @@ export const PlayerSetup = ({ onStartGame }: PlayerSetupProps) => {
               <div className='font-medium'>Tracked Game</div>
               <div className='text-sm opacity-75'>
                 Use permanent players + stats
+              </div>
+            </button>
+            <button
+              onClick={() => setGameMode('manual')}
+              className={`flex-1 py-3 px-4 rounded-lg border-2 transition-colors ${
+                gameMode === 'manual'
+                  ? 'border-green-500 bg-green-50 text-green-700'
+                  : 'border-gray-300 text-gray-700 hover:border-gray-400'
+              }`}
+            >
+              <div className='font-medium'>Quick Game</div>
+              <div className='text-sm opacity-75'>
+                Enter player names manually
               </div>
             </button>
           </div>
